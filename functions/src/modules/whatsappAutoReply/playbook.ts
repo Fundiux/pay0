@@ -34,6 +34,12 @@ const CATEGORY_TEXT: Record<string, string> = {
 /** A starting text for the owner to edit. Never contains amounts, times or internal terms. */
 export function suggestGuidance(type: string, kind: string, subject: string | null, category: string | null): string {
   if (type === "CORRECTION") return CATEGORY_TEXT[category || "OTHER"] || CATEGORY_TEXT.OTHER;
+  if (type === "HUMAN_ANSWERED") {
+    if (kind === "GREETING") return "En este grupo una persona del equipo contesta los saludos; Hugo puede saludar primero cuando nadie lo haga.";
+    return kind === "STATUS_INQUIRY"
+      ? "En este grupo una persona contesta las preguntas de estatus; Hugo debe dejar que el equipo conteste y solo avisar si nadie lo hace a tiempo."
+      : "En este grupo una persona contesta las consultas; Hugo debe esperar al equipo y responder con prudencia solo si nadie contesta.";
+  }
   const about = subject && SUBJECT_TEXT[subject] ? ` por ${SUBJECT_TEXT[subject]}` : "";
   return kind === "STATUS_INQUIRY"
     ? `Este cliente pregunta${about} y nadie le contesta a tiempo; Hugo debe avisar al equipo y atender con la información del sistema.`

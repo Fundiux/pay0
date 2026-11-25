@@ -111,6 +111,16 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
   // Captura opcional (apagada por defecto): solo grupos autorizados, sin responder ni enviar nada.
   // Is this message a WhatsApp mention of this very account? A mention may carry the linked-device id (@lid) while client.info
   // holds the phone id (@c.us), so every known id of the account is compared, and an unknown @lid is resolved to its contact.
+  // Capture counters (counts only, never ids or text): they show whether WhatsApp delivers messages for the observed groups at all.
+  const captureStats = { events: 0, groupEvents: 0, notObserved: 0, buffered: 0, lastLogged: -1 };
+  const capturedChats = new Set();
+  function logCaptureStats() {
+    if (captureStats.events === captureStats.lastLogged) return null;
+    captureStats.lastLogged = captureStats.events;
+    const line = { status: "CAPTURE_STATS", events: captureStats.events, groupEvents: captureStats.groupEvents, notObserved: captureStats.notObserved, buffered: captureStats.buffered, observedGroups: observedChats.size, groupsWithMessages: capturedChats.size, ready };
+    console.log(JSON.stringify(line));
+    return line;
+  }
   let ownIds = null;
   const idOf = value => String((value && value._serialized) || value || "");
   const numberOf = id => id.split("@")[0].split(":")[0];
@@ -144,6 +154,8 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
     try {
       const fromMe = !!message?.fromMe, chatId = String((fromMe ? message?.to : message?.from) || "");
       const messageId = String(message?.id?._serialized || ""), timestampMs = Number(message?.timestamp) * 1000;
+      captureStats.events++;
+      if (chatId.endsWith("@g.us")) { captureStats.groupEvents++; if (!observedChats.has(chatId)) captureStats.notObserved++; }
       if (!chatId.endsWith("@g.us") || !observedChats.has(chatId) || !messageId || !Number.isSafeInteger(timestampMs) || timestampMs < 1) return;
       const type = String(message?.type || "chat").slice(0, 40), author = message?.author || (fromMe ? "" : message?.from);
       if (buffer.length >= MAX_BUFFERED_MESSAGES) buffer.shift();
@@ -157,6 +169,7 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
       const text = type === "chat" && typeof message?.body === "string" ? message.body.slice(0, 1000) : "";
       if (addressedOnly.has(chatId) && !(mentioned || /\bhugo\b/i.test(text.normalize("NFD").replace(/[̀-ͯ]/g, "")))) return;
       if (addressedOnly.has(chatId)) { internalCaptured++; console.log(JSON.stringify({ status: "INTERNAL_ADDRESSED_CAPTURED", total: internalCaptured, mentioned })); }
+      captureStats.buffered++; capturedChats.add(chatId);
       buffer.push({ messageId, chatId, fromMe, timestampMs, type, ...(author ? { authorId: String(author).slice(0, 200) } : {}),
         body: text, ...(mentioned ? { mentionsMe: true } : {}) });
     } catch { /* un mensaje ilegible nunca detiene el conector */ }
@@ -266,10 +279,11 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
   await client.initialize();
   timers.push(setTimer(() => poll().catch(() => undefined), 10000));
   if (captureGroups) timers.push(setTimer(() => flush().catch(() => undefined), 15000));
+  if (captureGroups) timers.push(setTimer(() => { logCaptureStats(); }, 10 * 60 * 1000));
   if (sendDocuments) timers.push(setTimer(() => deliver().catch(() => undefined), 10000));
   timers.push(setTimer(() => watchdog().catch(() => undefined), 60000));
   if (startedCode !== null) timers.push(setTimer(() => checkCodeUpdate().catch(() => undefined), codeCheckMs));
-  return { poll, synchronize, flush, deliver, watchdog, checkCodeUpdate, stop: async () => { stopped = true; for (const timer of timers) clearTimer(timer); await client.destroy(); } };
+  return { poll, synchronize, flush, deliver, watchdog, checkCodeUpdate, logCaptureStats, stop: async () => { stopped = true; for (const timer of timers) clearTimer(timer); await client.destroy(); } };
 }
 
 async function startExplicitly(config) {

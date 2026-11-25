@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const lib = '../../functions/lib/modules/whatsappAutoReply/';
-const { maskPhrase, findMissedQuestions, correctionLessonId, missedLessonId, isCorrectionCategory, MASKED_PHRASE_MAX } = require(lib + 'lessons.js');
+const { findHumanAnswers, answeredLessonId, maskPhrase, findMissedQuestions, correctionLessonId, missedLessonId, isCorrectionCategory, MASKED_PHRASE_MAX } = require(lib + 'lessons.js');
 const { OWNER_WORKING_HOURS } = require(lib + 'domain.js');
 
 let checks = 0;
@@ -40,5 +40,21 @@ found = run([row('a', { body: '¿Me pueden dar la constancia?' })]);
 eq(found[0].kind, 'QUESTION'); eq(found[0].subject, null);
 found = run([row('a', { timestampMs: Date.UTC(2026, 10, 24, 5, 0) })], { nowMs: Date.UTC(2026, 10, 24, 5, 40) });
 eq(found[0].withinHours, false, 'outside working hours is flagged as expected');
+
+// Human answered where Hugo stayed silent: any observed group, acting or not.
+const obs = { observedChats: new Set(['g1', 'g2']), operatorHashes: new Set(['op']), repliedIds: new Set(), nowMs: NOW, workingHours: OWNER_WORKING_HOURS };
+const human = (messages, over = {}) => findHumanAnswers({ ...obs, messages, ...over });
+const q = row('a', { timestampMs: NOW - 10 * MIN });
+let ans = human([q, row('b', { authorHash: 'op', body: 'Ya lo revisamos', timestampMs: NOW - 8 * MIN })]);
+eq(ans.length, 1); eq(ans[0].kind, 'STATUS_INQUIRY'); eq(ans[0].subject, 'TRANSFER');
+eq(human([q, row('b', { fromMe: true, body: 'ok', timestampMs: NOW - 8 * MIN })]).length, 1, 'connected number counts as a person');
+eq(human([row('a', { chatId: 'g2', timestampMs: NOW - 10 * MIN }), row('b', { chatId: 'g2', authorHash: 'op', timestampMs: NOW - 9 * MIN })]).length, 1, 'observed-only group');
+eq(human([row('a', { chatId: 'g9', timestampMs: NOW - 10 * MIN }), row('b', { chatId: 'g9', authorHash: 'op', timestampMs: NOW - 9 * MIN })]).length, 0, 'unobserved group');
+eq(human([q]).length, 0, 'nobody answered');
+eq(human([q, row('b', { authorHash: 'op', timestampMs: NOW - 8 * MIN })], { repliedIds: new Set(['a']) }).length, 0, 'Hugo replied');
+eq(human([q, row('b', { authorHash: 'op', timestampMs: NOW - 8 * MIN + 40 * MIN })]).length, 0, 'answer past the reply window');
+eq(human([row('a', { body: 'Buenos días', timestampMs: NOW - 10 * MIN }), row('b', { authorHash: 'op', body: 'Buen día', timestampMs: NOW - 9 * MIN })])[0].kind, 'GREETING');
+eq(human([row('a', { type: 'document', timestampMs: NOW - 10 * MIN }), row('b', { authorHash: 'op', timestampMs: NOW - 9 * MIN })]).length, 0, 'documents are not conversation');
+ok(answeredLessonId('r', 'm') !== missedLessonId('r', 'm'));
 
 console.log(`whatsapp-reply-lessons: ${checks} checks passed`);

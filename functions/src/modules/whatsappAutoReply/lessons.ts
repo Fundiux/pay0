@@ -73,6 +73,40 @@ export function findMissedQuestions(input: MissedInput): MissedQuestion[] {
   return found;
 }
 
+export const answeredLessonId = (rootId: string, messageId: string) => `ans__${rootId.slice(0, 40)}__${messageId}`.slice(0, 200);
+
+export type HumanAnswered = { messageId: string; chatId: string; kind: "GREETING" | "STATUS_INQUIRY" | "QUESTION"; subject: StatusSubject | null; phrase: string; withinHours: boolean };
+
+export type HumanAnsweredInput = {
+  messages: InboundRow[];
+  /** Every group Hugo observes, acting or not. */
+  observedChats: ReadonlySet<string>;
+  operatorHashes: ReadonlySet<string>;
+  /** Messages Hugo already replied to: those are not silences. */
+  repliedIds: ReadonlySet<string>;
+  nowMs: number;
+  workingHours: WorkingHours | null;
+};
+
+/** A client greeting or question that a person (operator or the connected number) answered within the reply window while Hugo said nothing. */
+export function findHumanAnswers(input: HumanAnsweredInput): HumanAnswered[] {
+  const found: HumanAnswered[] = [];
+  const isPerson = (row: InboundRow) => row.fromMe || (!!row.authorHash && input.operatorHashes.has(row.authorHash));
+  const byChat = new Map<string, InboundRow[]>();
+  for (const row of input.messages) if (input.observedChats.has(row.chatId)) byChat.set(row.chatId, [...(byChat.get(row.chatId) || []), row]);
+  for (const [chatId, rows] of byChat) {
+    for (const row of rows) {
+      if (isPerson(row) || input.repliedIds.has(row.id) || row.type !== "chat") continue;
+      const kind = classifyMessage(row.body);
+      if (kind !== "GREETING" && kind !== "STATUS_INQUIRY" && kind !== "QUESTION") continue;
+      const answered = rows.some(other => other.timestampMs > row.timestampMs && other.timestampMs - row.timestampMs <= MAX_REPLY_AGE_MS && isPerson(other));
+      if (!answered) continue;
+      found.push({ messageId: row.id, chatId, kind, subject: kind === "STATUS_INQUIRY" ? statusSubject(row.body) : null, phrase: maskPhrase(row.body), withinHours: isWithinWorkingHours(input.workingHours, row.timestampMs) });
+    }
+  }
+  return found;
+}
+
 export function isCorrectionCategory(value: unknown): value is CorrectionCategory {
   return typeof value === "string" && (CORRECTION_CATEGORIES as readonly string[]).includes(value);
 }

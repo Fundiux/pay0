@@ -19,6 +19,7 @@ import {
   type WhatsAppAgentMode,
   type WhatsAppAgentObserversConfig,
   type WhatsAppReplyMetricsBucket,
+  type WhatsAppObservationSummary,
   type WhatsAppAgentObserversState,
   type WhatsAppReplyMode,
   decideWhatsAppPlaybookEntry,
@@ -135,6 +136,7 @@ function ReplyMetricsBlock({ agentId, agentName }: { agentId: string; agentName:
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [buckets, setBuckets] = useState<WhatsAppReplyMetricsBucket[] | null>(null);
+  const [observation, setObservation] = useState<WhatsAppObservationSummary | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -142,7 +144,7 @@ function ReplyMetricsBlock({ agentId, agentName }: { agentId: string; agentName:
     let alive = true;
     setLoading(true); setError("");
     getWhatsAppAgentReplyMetrics(month)
-      .then(result => { if (alive) setBuckets(result.buckets.filter(row => row.agentId === agentId)); })
+      .then(result => { if (alive) { setBuckets(result.buckets.filter(row => row.agentId === agentId)); setObservation(result.observation ?? null); } })
       .catch((e: any) => { if (alive) setError(`No se pudo cargar: ${e?.message || e}`); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
@@ -160,6 +162,13 @@ function ReplyMetricsBlock({ agentId, agentName }: { agentId: string; agentName:
         {loading && <Loader2 size={14} className="animate-spin text-slate-400" />}
       </div>
       {error && <p className="mt-2 text-xs text-rose-300">{error}</p>}
+      {observation && (
+        <p className="mt-2 text-xs text-slate-300">
+          Observando {observation.observedGroups} grupos: {observation.groupsWithConversation} con conversación ({observation.conversationMessages} mensajes), {observation.humanAnswers} respuestas de una persona donde Hugo calló
+          (en {observation.humanAnswerGroups} grupos). Envíos de documentos, aparte: {observation.documentMessages} en {observation.groupsWithDocuments} grupos.
+          {observation.truncated ? " Conteo parcial." : ""}
+        </p>
+      )}
       {buckets && !total && <p className="mt-2 text-xs text-slate-500">Sin respuestas ni cambios de modo en este mes.</p>}
       {total && (
         <div className="mt-2 overflow-x-auto">
@@ -189,6 +198,9 @@ function ReplyMetricsBlock({ agentId, agentName }: { agentId: string; agentName:
 const PLAYBOOK_TITLES: Record<string, string> = {
   "MISSED_QUESTION|STATUS_INQUIRY": "Preguntas de estatus sin respuesta",
   "MISSED_QUESTION|QUESTION": "Preguntas sin respuesta",
+  "HUMAN_ANSWERED|GREETING": "Saludos que contestó una persona",
+  "HUMAN_ANSWERED|STATUS_INQUIRY": "Preguntas de estatus que contestó una persona",
+  "HUMAN_ANSWERED|QUESTION": "Consultas que contestó una persona",
   "CORRECTION|WRONG_FACT": "Respuestas con datos incorrectos",
   "CORRECTION|TONE": "Respuestas con tono que no gustó",
   "CORRECTION|NOT_NEEDED": "Respuestas que no hacían falta",

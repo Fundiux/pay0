@@ -90,6 +90,10 @@ const inbound = (over = {}) => ({ fromMe: false, from: GROUP, author: '521551111
     eq(sent.map(m => m.messageId), ['c1', 'i1', 'i3', 'i5', 'i6', 'i7'], 'client groups keep everything; the internal group only what addresses Hugo');
     eq(sent.filter(m => m.mentionsMe).map(m => m.messageId), ['i3', 'i6', 'i7'], 'quoting one of his own messages addresses him');
     ok(!('mentionsMe' in sent[0]) && !('mentionsMe' in sent[1]), 'the flag is only sent when true');
+    const stats = running.logCaptureStats();
+    eq([stats.events, stats.groupEvents, stats.notObserved, stats.buffered, stats.groupsWithMessages, stats.observedGroups], [10, 10, 0, 6, 2, 2], 'capture counters');
+    ok(!/@g\.us|hugo|buen/i.test(JSON.stringify(stats)), 'counts only: no ids or text');
+    eq(running.logCaptureStats(), null, 'nothing new, nothing logged');
     await running.stop();
   }
 

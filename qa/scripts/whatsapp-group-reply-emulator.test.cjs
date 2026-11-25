@@ -16,7 +16,7 @@ const db = admin.firestore();
 const lib = '../../functions/lib/modules/';
 const { WhatsAppConnectorAuthority } = require(lib + 'documentDelivery/whatsappConnectorAuthority.js');
 const policy = require(lib + 'documentDelivery/whatsappConnectorPolicy.js');
-const { runGroupReplies, replyConfigId } = require(lib + 'whatsappAutoReply/runner.js');
+const { runGroupReplies, replyConfigId, replyJobId } = require(lib + 'whatsappAutoReply/runner.js');
 const { getWhatsAppAgentPlaybook, decideWhatsAppPlaybookEntry } = require(lib + 'whatsappAutoReply/playbookCallables.js');
 const { setWhatsAppReplySimulation, getWhatsAppSimulatedReplies } = require(lib + 'whatsappAutoReply/simulationCallables.js');
 const { setSimulationModelForTests } = require(lib + 'whatsappAutoReply/simulationRunner.js');
@@ -285,6 +285,29 @@ const setReply = (enabled, mode) => db.doc(`whatsappAgentReplyConfigs/${replyCon
     assert.equal(lessons[0].get('groupName'), 'Grupo lecciones');
     assert.ok(!/\d|juan/i.test(lessons[0].get('phrase')), 'the stored phrase is masked');
     assert.equal(missed.length > 0, true);
+  });
+
+  await test('a-person-answering-where-hugo-stayed-silent-teaches-from-an-observer-group', async () => {
+    const groupQ = '120363555000000016@g.us';
+    // Observer mode (the default): Hugo says nothing here, and it must still learn from what the team does.
+    await observe(groupQ, 'Grupo observado', betell, { agentModes: {} });
+    const answer = (clientBody, minutesAgo, answered = true) => (async () => {
+      const client = await inbound(groupQ, { body: clientBody, timestampMs: NOW - minutesAgo * MIN });
+      if (answered) await inbound(groupQ, { body: 'Claro, ya lo vemos', authorHash: operatorHash, timestampMs: NOW - (minutesAgo - 2) * MIN });
+      return client;
+    })();
+    const first = await answer('Buenos días', 34), second = await answer('Buenas tardes', 29), third = await answer('Hola buen día', 24), nobody = await answer('Buen día, ¿me ayudan?', 12, false);
+    const result = await runGroupReplies(rootId, NOW);
+    assert.equal(result.queued, 0, 'an observer group is never answered');
+    for (const id of [first, second, third, nobody]) assert.equal((await db.doc(`documentDeliveryJobs/${replyJobId(rootId, id)}`).get()).exists, false);
+    const lessons = (await db.collection('whatsappAgentLessons').where('rootId', '==', rootId).where('type', '==', 'HUMAN_ANSWERED').get()).docs.filter(doc => doc.get('chatId') === groupQ);
+    assert.equal(lessons.length, 3, 'one per client message a person answered, none for the one nobody answered');
+    assert.ok(lessons.every(doc => doc.get('actingGroup') === false && doc.get('kind') === 'GREETING'));
+    await runGroupReplies(rootId, NOW + MIN);
+    assert.equal((await db.collection('whatsappAgentLessons').where('rootId', '==', rootId).where('type', '==', 'HUMAN_ANSWERED').get()).docs.filter(doc => doc.get('chatId') === groupQ).length, 3, 'running again repeats nothing');
+    const entries = (await getWhatsAppAgentPlaybook.run({ auth: { uid: ownerUid }, data: {} })).entries.filter(e => e.chatId === groupQ && e.type === 'HUMAN_ANSWERED');
+    assert.equal(entries.length, 1, 'three cases in the group become one proposal');
+    assert.equal(entries[0].status, 'PROPOSED'); assert.equal(entries[0].evidenceCount, 3);
   });
 
   await test('a-correction-keeps-the-reason-per-group-and-unmarking-removes-it', async () => {

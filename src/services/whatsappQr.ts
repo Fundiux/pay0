@@ -192,6 +192,11 @@ export type WhatsAppReplyMetricsBucket = {
   avgResponseMs: number | null; aiTokens: number; returnsToObserver: number; returnReasons: string[]; actingChanges: number;
 };
 
+export type WhatsAppObservationSummary = {
+  observedGroups: number; groupsWithConversation: number; conversationMessages: number; groupsWithDocuments: number; documentMessages: number;
+  humanAnswers: number; humanAnswerGroups: number; truncated: boolean;
+};
+
 export type WhatsAppPlaybookEntry = {
   id: string; chatId: string; groupName: string; type: string; kind: string; subject: string | null; category: string | null; status: "PROPOSED" | "APPROVED" | "REJECTED";
   evidenceCount: number; examples: string[]; suggestedGuidance: string; guidance: string; simulationEndsAtMs: number | null;
@@ -229,7 +234,7 @@ export async function markWhatsAppReplyCorrection(input: { jobId: string; correc
 }
 
 export async function getWhatsAppAgentReplyMetrics(month?: string) {
-  return (await httpsCallable<{ month?: string }, { ok: boolean; month: string; truncated: boolean; buckets: WhatsAppReplyMetricsBucket[] }>(functions, "getWhatsAppAgentReplyMetrics")({ month })).data;
+  return (await httpsCallable<{ month?: string }, { ok: boolean; month: string; truncated: boolean; buckets: WhatsAppReplyMetricsBucket[]; observation?: WhatsAppObservationSummary }>(functions, "getWhatsAppAgentReplyMetrics")({ month })).data;
 }
 
 export async function saveWhatsAppAgentObservers(input: { groupChatId: string; active: boolean; ownerUserUid: string; observers: WhatsAppAgentObserver[] }) {
