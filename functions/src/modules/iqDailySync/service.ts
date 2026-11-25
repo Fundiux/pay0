@@ -423,6 +423,6 @@ export async function runIqDailySync(input: { secret: string; now?: Date; runKey
 
 // 20:30 after IQ hours (window yesterday + today) and 06:30 catch-up of the previous day.
 export const runIqDailyReverseSync = onSchedule(
-  { schedule: "30 6,20 * * *", timeZone: "America/Mexico_City", region: "us-central1", timeoutSeconds: 540, memory: "1GiB", retryCount: 0, maxInstances: 1, concurrency: 1, secrets: [IQ_CREDENTIALS_KEY] },
+  { schedule: "30 6,20 * * *", timeZone: "America/Mexico_City", region: "us-central1", timeoutSeconds: 540, memory: "2GiB", retryCount: 0, maxInstances: 1, concurrency: 1, secrets: [IQ_CREDENTIALS_KEY] },
   async () => { await runIqDailySync({ secret: IQ_CREDENTIALS_KEY.value() }); },
 );

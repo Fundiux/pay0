@@ -16,9 +16,10 @@ const IQ_CREDENTIALS_KEY = defineSecret("IQ_CREDENTIALS_KEY");
 export const BACKFILL_PROCESS = "IQ_BACKFILL";
 export const BACKFILL_DEFAULT_START_MONTH = "2025-01";
 export const BACKFILL_DEFAULT_END_DATE = "2026-11-23";
-/** One invocation works on at most this many months and stops starting new ones after this time. */
+/** One invocation works on at most this many months, and starts one only if its whole budget plus a margin fits the function timeout. */
 export const BACKFILL_MAX_MONTHS_PER_INVOCATION = 6;
-export const BACKFILL_NO_NEW_MONTH_AFTER_MS = 270_000;
+export const BACKFILL_FUNCTION_TIMEOUT_MS = 540_000;
+export const BACKFILL_SAFETY_MARGIN_MS = 30_000;
 export const BACKFILL_BUDGET: Partial<DailySyncBudget> = { maxWrites: 1500, maxDurationMs: 450_000, maxErrors: 8, maxLayers: 3, maxDispersionsImported: 150, maxPagosPosted: 300, onlyConcretized: true };
 
 const text = (value: unknown) => String(value ?? "").trim();
@@ -71,7 +72,8 @@ export async function runIqBackfillForRoot(input: { rootId: string; secret: stri
       await configRef(rootId).set({ status: "DONE", cursorMonth: cursor, finishedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
       return { rootId, status: "DONE", monthsClosed, cursorMonth: cursor };
     }
-    if (i > 0 && Date.now() - started > BACKFILL_NO_NEW_MONTH_AFTER_MS) break;
+    // A month may use the whole run budget: never start one that could outlive the function timeout (it would die holding the lease).
+    if (i > 0 && Date.now() - started + BACKFILL_BUDGET.maxDurationMs! + BACKFILL_SAFETY_MARGIN_MS > BACKFILL_FUNCTION_TIMEOUT_MS) break;
     await configRef(rootId).set({ status: "RUNNING", cursorMonth: cursor, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     const result = await runIqDailySyncForRoot({
       rootId, secret: input.secret, now: input.now, runKey: `bf-${cursor}-${new Date().toISOString()}`, budget: BACKFILL_BUDGET,
@@ -100,7 +102,7 @@ export async function runIqBackfillForRoot(input: { rootId: string; secret: stri
 
 // Every 30 minutes; a lease keeps two runs from overlapping and the safety breaker pauses it on repeated errors.
 export const runIqHistoricalBackfill = onSchedule(
-  { schedule: "*/30 * * * *", timeZone: "America/Mexico_City", region: "us-central1", timeoutSeconds: 540, memory: "1GiB", retryCount: 0, maxInstances: 1, concurrency: 1, secrets: [IQ_CREDENTIALS_KEY] },
+  { schedule: "*/30 * * * *", timeZone: "America/Mexico_City", region: "us-central1", timeoutSeconds: 540, memory: "2GiB", retryCount: 0, maxInstances: 1, concurrency: 1, secrets: [IQ_CREDENTIALS_KEY] },
   async () => {
     for (const rootId of await dailySyncRoots()) {
       const outcome = await runIqBackfillForRoot({ rootId, secret: IQ_CREDENTIALS_KEY.value() });
