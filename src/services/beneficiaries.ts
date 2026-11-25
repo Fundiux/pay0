@@ -50,6 +50,7 @@ export interface ClientBeneficiaryMethodRow {
   iqLinkStatus?: "PENDING" | "SYNCING" | "VERIFIED" | "AMBIGUOUS" | "NOT_FOUND" | "STALE" | "ERROR" | "REVIEW_REQUIRED" | null;
   iqBeneficiaryId?: string | null;
   iqAccountId?: string | null;
+  iqLinksByCatalog?: Record<string, unknown> | null;
   iqLastSyncedAt?: any;
   iqLastError?: string | null;
   active?: boolean;

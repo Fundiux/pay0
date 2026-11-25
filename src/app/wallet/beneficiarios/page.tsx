@@ -5,6 +5,7 @@ import { parsePay0MassiveLayoutRows, type Pay0MassiveMethodTipo, type Pay0Massiv
 import { readPay0MassiveRowsFromFile } from "@/lib/readPay0MassiveExcel";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
+import { IQ_PENDING_LABEL, isIqReconciled } from "@/lib/iqMethodReadiness";
 import { useUserProfile } from "@/lib/useUserProfile";
 import { listScopedClients } from "@/services/clients";
 import { BANK_OPTIONS, findBankByCode } from "@/constants/banks";
@@ -1854,13 +1855,17 @@ const [expandedBeneficiaries, setExpandedBeneficiaries] = useState<Record<string
                     </thead>
                     <tbody>
                       {rows.map((row, methodIndex) => (
-                        <tr key={row.id} className={methodIndex % 2 === 0 ? "pay0-row-even" : "pay0-row-odd"}>
+                        <tr
+                          key={row.id}
+                          className={`${methodIndex % 2 === 0 ? "pay0-row-even" : "pay0-row-odd"} ${row.active && !isMethodReplaced(row) && !isIqReconciled(row) ? "bg-orange-500/15 text-orange-200" : ""}`}
+                          title={row.active && !isMethodReplaced(row) && !isIqReconciled(row) ? IQ_PENDING_LABEL : undefined}
+                        >
                           <td className="pay0-td">{row.tipo || "-"}</td>
                           <td className="pay0-td">{row.bankName || "-"}</td>
                           <td className="pay0-td-date">{row.clabe || "-"}</td>
                           <td className="pay0-td-date">{row.cardNumber || "-"}</td>
                           <td className="pay0-td">
-                            {isMethodReplaced(row) ? "Reemplazado" : row.active ? "Activo" : "Inactivo"}
+                            {isMethodReplaced(row) ? "Reemplazado" : row.active ? (isIqReconciled(row) ? "Activo" : "Pendiente IQ") : "Inactivo"}
                           </td>
                           <td className="pay0-td text-center">
                             <div className="inline-flex items-center justify-center gap-1">
