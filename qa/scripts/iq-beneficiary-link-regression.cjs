@@ -53,8 +53,8 @@ const link = async (methodId, nowMs) => (await linkOrCreateMethod({ methodId, po
   eq(evaluateCreateGate({ masterEnabled: false, config: { enabled: true, contractVerified: true }, createdToday: 0 }).reason, "IQ_MASTER_OFF", "sin interruptor maestro");
   eq(evaluateCreateGate({ masterEnabled: true, config: { enabled: false, contractVerified: true }, createdToday: 0 }).reason, "CREATE_DISABLED", "creación apagada");
   eq(evaluateCreateGate({ masterEnabled: true, config: { enabled: true }, createdToday: 0 }).reason, "CREATE_CONTRACT_UNVERIFIED", "contrato sin verificar");
-  eq(evaluateCreateGate({ masterEnabled: true, config: { enabled: true, contractVerified: true }, createdToday: 99 }).allowed, true, "límite por defecto 100: el 100.º cabe");
-  eq(evaluateCreateGate({ masterEnabled: true, config: { enabled: true, contractVerified: true }, createdToday: 100 }).reason, "DAILY_LIMIT_REACHED", "límite por defecto 100: el 101.º no");
+  eq(evaluateCreateGate({ masterEnabled: true, config: { enabled: true, contractVerified: true }, createdToday: 100_000 }).allowed, true, "sin límite configurado no hay tope diario (dueño 2026-11-24)");
+  eq(evaluateCreateGate({ masterEnabled: true, config: { enabled: true, contractVerified: true, dailyLimit: 100 }, createdToday: 100 }).reason, "DAILY_LIMIT_REACHED", "límite explícito 100: el 101.º no");
   eq(evaluateCreateGate({ masterEnabled: true, config: { enabled: true, contractVerified: true, dailyLimit: 10 }, createdToday: 3 }).allowed, true, "el límite se lee de la configuración");
   eq(createReservationId("r", "c", "k"), createReservationId("r", "c", "k"), "la reserva es determinista");
 

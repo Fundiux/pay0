@@ -134,7 +134,7 @@ const resetIq = () => { iq.requests.length = 0; iq.logins.length = 0; iq.account
   // ---- setup ----
   for (const [id, profile] of Object.entries(PROFILES)) await db.doc(`iqCredentialProfiles/${id}`).set({ rootId, alias: profile.alias, username: profile.username, active: true, hasPassword: true, ...encrypted(`pw-${id}`) });
   await db.doc(`iqIntegrationConfigs/${rootId}`).set({ enabled: true });
-  await db.doc(`iqBeneficiaryCreateConfig/${rootId}`).set({ enabled: true, contractVerified: true }); // default daily limit (100)
+  await db.doc(`iqBeneficiaryCreateConfig/${rootId}`).set({ enabled: true, contractVerified: true }); // no daily limit by default (owner 2026-11-24)
   await setFresh(1);
 
   // A. RR catalog through a BETELL 1 client: absent in the catalog -> created once, with the RR login
@@ -228,7 +228,8 @@ const resetIq = () => { iq.requests.length = 0; iq.logins.length = 0; iq.account
   eq([last.status, last.createState, accountPosts()], ["REVIEW_REQUIRED", "OUTCOME_UNKNOWN", 1], "tras releer sin encontrarla va a revisión; un solo POST de cuenta en total");
   eq((await reservation(e.clabe)).status, "OUTCOME_UNKNOWN", "la reserva incierta nunca se vuelve a tomar");
 
-  // F. daily limit 100 by default
+  // F. an explicit daily limit of 100 is respected
+  await db.doc(`iqBeneficiaryCreateConfig/${rootId}`).set({ dailyLimit: 100 }, { merge: true });
   await resetSafety(); resetIq();
   await counter().set({ count: 99 }, { merge: true });
   const f = await setup("f");
@@ -237,6 +238,12 @@ const resetIq = () => { iq.requests.length = 0; iq.logins.length = 0; iq.account
   const f2 = await setup("f2");
   const outF2 = await link(f2.methodId);
   eq([outF2.status, outF2.createState, accountPosts(), beneficiaryPosts()], ["PENDING_RETRY", "DAILY_LIMIT_REACHED", 0, 0], "la 101 espera al día siguiente sin escribir en IQ");
+  // F3. without dailyLimit there is no cap: the 101st of the day is created
+  await db.doc(`iqBeneficiaryCreateConfig/${rootId}`).set({ dailyLimit: FieldValue.delete() }, { merge: true });
+  await resetSafety(); resetIq();
+  await counter().set({ count: 100 }, { merge: true });
+  const f3 = await setup("f3");
+  eq([(await link(f3.methodId)).status, accountPosts()], ["NOT_CONCILIATED", 1], "sin límite configurado la 101 del día se crea");
   await counter().set({ count: 0 }, { merge: true });
 
   // G. stale catalog defers without any IQ request
