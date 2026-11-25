@@ -8,6 +8,8 @@ export const createWhatsAppConnectorEnrollment = onCall(options, request => auth
 export const revokeWhatsAppConnectorBinding = onCall(options, request => authority.revoke(request));
 export const getWhatsAppConnectorBinding = onCall(options, request => authority.getOwned(request));
 export const listWhatsAppAgentConnectors = onCall(options, request => authority.listOwned(request));
+// Superadmin only (checked inside enqueue): restarts the local connector process; the WhatsApp session is kept.
+export const requestWhatsAppConnectorRestart = onCall(options, request => authority.enqueue(request, "RESTART"));
 // Worker endpoints authenticate exclusively by the registered Ed25519 proof, never request root/default/heartbeat.
 const worker = async (run: () => Promise<unknown>) => {
   try { return await run(); }

@@ -7,6 +7,7 @@ import { getMyUser, getRootId, requireAuth } from "../sharedCallables/helpers";
 import { assertEnrollmentProof, assertPublicKey, assertWorkerEnvelope, canonicalDataHash, Binding, Enrollment, EnrollmentProof, SENDING_WORKER_ACTIONS, WorkerEnvelope } from "./whatsappConnectorPolicy";
 import { WhatsAppDocumentSender, type DocumentSenderOptions } from "./whatsappDeliverySender";
 import { DOCUMENT_SENDER_AGENT_ID } from "./whatsappDeliveryDomain";
+import { logActivity } from "../../utils/logActivity";
 
 const id = (s: unknown): string => {
   if (typeof s !== "string" || !s || s.length > 180 || /[\/\x00-\x1f]/.test(s)) throw new HttpsError("invalid-argument", "Identidad inválida.");
@@ -15,6 +16,8 @@ const id = (s: unknown): string => {
 function fail(code = "permission-denied"): never { throw new HttpsError(code as any, "El vínculo del conector no está autorizado."); }
 /** Vínculo histórico (un solo conector por superadmin). Los vínculos por agente usan el id del agente. */
 export const LEGACY_CONNECTOR_AGENT = "pay0";
+const RESTART_COMMAND_TTL_MS = 10 * 60 * 1000;
+const agentLabel = (agentId: unknown) => AGENTS.find(agent => agent.id === agentId)?.name || String(agentId || "");
 const INBOUND_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 export function connectorAgentOf(value: unknown): string {
   if (value === undefined || value === null || value === "" || value === LEGACY_CONNECTOR_AGENT) return LEGACY_CONNECTOR_AGENT;
@@ -29,7 +32,7 @@ export async function requireWhatsAppSuperadmin(request: any) {
 }
 export class WhatsAppConnectorAuthority {
   private readonly sender: WhatsAppDocumentSender;
-  constructor(private readonly db: Firestore, senderOptions: DocumentSenderOptions = {}) {
+  constructor(private readonly db: Firestore, senderOptions: DocumentSenderOptions = {}, private readonly audit: (entry: Parameters<typeof logActivity>[0]) => Promise<unknown> = logActivity) {
     this.sender = new WhatsAppDocumentSender(db, senderOptions);
   }
   private owner(rootId: string, uid: string, agentId = LEGACY_CONNECTOR_AGENT) { return this.db.doc(`whatsappQrConnectorOwners/${Buffer.from(JSON.stringify(agentId === LEGACY_CONNECTOR_AGENT ? [rootId, uid] : [rootId, uid, agentId])).toString("base64url")}`); }
@@ -108,22 +111,35 @@ export class WhatsAppConnectorAuthority {
       return { ok: true, binding: binding ? { id: binding.id, agentId: connectorAgentOf(binding.agentId), rootId: binding.rootId, ownerUid: binding.ownerUid, generation: binding.generation, state: binding.state, externalAccountVerified: false } : null };
     });
   }
-  async enqueue(request: any, type: "SYNC_CHATS" | "NEW_QR") {
+  async enqueue(request: any, type: "SYNC_CHATS" | "NEW_QR" | "RESTART") {
     const actor = await requireWhatsAppSuperadmin(request), commandRef = this.db.collection("whatsappQrConnectorCommands").doc();
-    return this.db.runTransaction(async tx => {
+    const result = await this.db.runTransaction(async tx => {
       await this.actor(tx, actor.uid, actor.rootId);
       const owner = (await tx.get(this.owner(actor.rootId, actor.uid, connectorAgentOf(request.data?.agentId)))).data();
       if (!owner?.bindingId) fail("failed-precondition");
       const binding = (await tx.get(this.db.doc(`whatsappQrConnectorBindings/${id(owner.bindingId)}`))).data();
       if (!binding || binding.state !== "ACTIVE" || binding.ownerUid !== actor.uid || binding.rootId !== actor.rootId) fail();
+      // A restart already waiting for the connector is the same restart: pressing the button twice must not restart it twice.
+      if (type === "RESTART") {
+        const waiting = await tx.get(this.db.collection("whatsappQrConnectorCommands").where("bindingId", "==", binding.id).where("status", "==", "PENDING").limit(5));
+        const same = waiting.docs.find((doc: any) => doc.data().type === "RESTART" && doc.data().requestedByUid === actor.uid && doc.data().generation === binding.generation);
+        if (same) return { ok: true, commandId: same.id, type, status: "PENDING", duplicate: true, message: "El reinicio ya estaba solicitado; el conector lo hará en unos segundos.", binding };
+      }
       tx.create(commandRef, { bindingId: binding.id, generation: binding.generation, connectorId: "default", rootId: actor.rootId,
         requestedByUid: actor.uid, type, status: "PENDING", createdAt: FieldValue.serverTimestamp() });
       tx.set(this.db.doc(`whatsappQrConnectors/${binding.id}`), { bindingId: binding.id, rootId: actor.rootId, ownerUid: actor.uid,
         lastCommandId: commandRef.id, lastCommandType: type, lastCommandStatus: "PENDING", lastCommandMessage: "Solicitud pendiente del conector autorizado.",
         lastCommandAt: FieldValue.serverTimestamp(), lastCommandFinishedAt: null,
         ...(type === "NEW_QR" ? { qrText: null, qrDataUrl: null } : {}) }, { merge: true });
-      return { ok: true, commandId: commandRef.id, type, status: "PENDING", message: "Solicitud enviada al conector autorizado." };
+      return { ok: true, commandId: commandRef.id, type, status: "PENDING", message: type === "RESTART" ? "Reinicio solicitado; el conector lo hará en unos segundos y conserva la sesión de WhatsApp." : "Solicitud enviada al conector autorizado.", binding };
     });
+    const { binding, ...visible } = result as any;
+    if (type === "RESTART" && !visible.duplicate) {
+      await this.audit({ event: "WHATSAPP_CONECTOR_REINICIO_SOLICITADO", rootId: actor.rootId, actorUid: actor.uid, actorName: actor.user?.displayName || actor.user?.nombreUsuario || null, actorRole: actor.user?.role || "superadmin",
+        referenceId: visible.commandId, referenceType: "whatsappQrConnectorCommand", entityId: binding.id, entityType: "whatsapp_connector",
+        description: `Se solicitó reiniciar el conector de WhatsApp de ${connectorAgentOf(binding.agentId) === LEGACY_CONNECTOR_AGENT ? "PAY0" : agentLabel(binding.agentId)}.` }).catch(() => undefined);
+    }
+    return visible;
   }
   /** Lista todos los vínculos del superadmin (uno por agente) con su estado visible. */
   async listOwned(request: any) {
@@ -155,12 +171,17 @@ export class WhatsAppConnectorAuthority {
       else if (envelope.action === "HEARTBEAT") result = await this.heartbeat(tx, binding, data, connectorAgentOf(row.agentId));
       else if (envelope.action === "INBOUND_GROUP") result = await this.inbound(tx, binding, row, data);
       else if (envelope.action === "SYNC_CHATS") result = await this.sync(tx, bindingRef, row, data);
+      else if (envelope.action === "RESTART_ACK") result = await this.restartAck(tx, binding, data);
       else result = await this.newQr(tx, binding, data);
       tx.create(nonceRef, { generation: binding.generation, action: envelope.action, createdAt: FieldValue.serverTimestamp() });
       return { ok: true, bindingId, generation: binding.generation, rootId: binding.rootId, binding, ...result };
     }).then(async ({ binding, claim, ...result }: any) => {
       // File URLs are signed after the lease commits; Storage calls never run inside the transaction.
       if (envelope.action === "CLAIM_DELIVERY") return { ...result, ...(await this.sender.finishClaim(binding, claim)) };
+      if (envelope.action === "RESTART_ACK") {
+        await this.audit({ event: "WHATSAPP_CONECTOR_REINICIADO", rootId: binding.rootId, actorUid: "SYSTEM", actorName: "Conector de WhatsApp", actorRole: "system", referenceId: String(result.commandId), referenceType: "whatsappQrConnectorCommand",
+          entityId: binding.id, entityType: "whatsapp_connector", description: `El conector de WhatsApp de ${agentLabel(binding.agentId)} confirmó el reinicio solicitado y se está reiniciando (la sesión se conserva).` }).catch(() => undefined);
+      }
       return result;
     });
   }
@@ -168,7 +189,7 @@ export class WhatsAppConnectorAuthority {
     if (!data || Object.keys(data).some(k => !["ready", "poll", "status", "qrText", "qrDataUrl", "error", "resetCommandId"].includes(k)) || typeof data.ready !== "boolean" || typeof data.poll !== "boolean") fail("invalid-argument");
     if (data.status !== undefined && !["CONNECTED", "DISCONNECTED", "QR_REQUIRED", "AUTHENTICATED", "ERROR"].includes(data.status)) fail("invalid-argument");
     for (const key of ["qrText", "qrDataUrl", "error"]) if (data[key] !== undefined && data[key] !== null && (typeof data[key] !== "string" || data[key].length > (key === "qrDataUrl" ? 32000 : 4000))) fail("invalid-argument");
-    const pending = data.poll ? await tx.get(this.db.collection("whatsappQrConnectorCommands").where("bindingId", "==", binding.id).where("status", "==", "PENDING").limit(1)) : null;
+    const pending = data.poll ? await tx.get(this.db.collection("whatsappQrConnectorCommands").where("bindingId", "==", binding.id).where("status", "==", "PENDING").limit(5)) : null;
     // El conector solo recibe los grupos que su agente tiene autorizados; el resto nunca sale del teléfono.
     const observed = data.poll && agentId !== LEGACY_CONNECTOR_AGENT ? await tx.get(this.db.collection("whatsappAgentObservers").where("rootId", "==", binding.rootId).where("active", "==", true).limit(200)) : null;
     const internalGroups = observed && agentId === "hugo" ? await tx.get(this.db.collection("whatsappInternalGroups").where("rootId", "==", binding.rootId).limit(50)) : null;
@@ -181,12 +202,17 @@ export class WhatsAppConnectorAuthority {
           reset.type !== "NEW_QR" || reset.status !== "RESET_AUTHORIZED" || data.status !== "QR_REQUIRED" || !data.qrText || !data.qrDataUrl) fail();
     }
     let command: any = null;
-    for (const doc of pending?.docs || []) {
-      const c = doc.data();
-      if (c.rootId !== binding.rootId || c.requestedByUid !== binding.ownerUid || c.generation !== binding.generation || !["SYNC_CHATS", "NEW_QR"].includes(c.type)) fail();
-      if (c.type === "SYNC_CHATS" && !data.ready) continue;
-      command = { id: doc.id, type: c.type };
-      tx.update(doc.ref, { status: "PROCESSING", processingBindingId: binding.id, startedAt: FieldValue.serverTimestamp() });
+    const rows = (pending?.docs || []).map((doc: any) => ({ doc, c: doc.data() }));
+    for (const { c } of rows) if (c.rootId !== binding.rootId || c.requestedByUid !== binding.ownerUid || c.generation !== binding.generation || !["SYNC_CHATS", "NEW_QR", "RESTART"].includes(c.type)) fail();
+    // A restart nobody picked up for ten minutes is stale (the connector was away): it is closed, never run later by surprise.
+    const stale = (row: any) => row.c.type === "RESTART" && typeof row.c.createdAt?.toMillis === "function" && Date.now() - row.c.createdAt.toMillis() > RESTART_COMMAND_TTL_MS;
+    for (const row of rows.filter(stale)) tx.update(row.doc.ref, { status: "EXPIRED", finishedAt: FieldValue.serverTimestamp() });
+    const eligible = rows.filter((row: any) => !stale(row) && !(row.c.type === "SYNC_CHATS" && !data.ready));
+    // A restart goes first: a connector that is stuck must not be kept waiting behind other requests.
+    const pick = eligible.find((row: any) => row.c.type === "RESTART") || eligible[0];
+    if (pick) {
+      command = { id: pick.doc.id, type: pick.c.type };
+      tx.update(pick.doc.ref, { status: "PROCESSING", processingBindingId: binding.id, startedAt: FieldValue.serverTimestamp() });
     }
     if (resetRef) tx.update(resetRef, { status: "DONE", finishedAt: FieldValue.serverTimestamp(), outcome: "LOCAL_QR_AVAILABLE_NOT_ACCOUNT_OWNERSHIP" });
     tx.set(this.db.doc(`whatsappQrConnectors/${binding.id}`), { bindingId: binding.id, rootId: binding.rootId, ownerUid: binding.ownerUid,
@@ -214,6 +240,15 @@ export class WhatsAppConnectorAuthority {
     tx.set(this.db.doc(`whatsappQrConnectors/${binding.id}`), { lastCommandId: ref.id, lastCommandType: "NEW_QR", lastCommandStatus: "PROCESSING",
       lastCommandMessage: "Reinicio local autorizado; se espera un QR nuevo.", qrText: null, qrDataUrl: null }, { merge: true });
     return { resetAuthorized: true, commandId: ref.id, externalAccountVerified: false };
+  }
+  /** The connector confirms it will restart. The lease is consumed once; the session is never reset by a restart. */
+  private async restartAck(tx: any, binding: Binding, data: any) {
+    if (!data || Object.keys(data).length !== 1) fail("invalid-argument");
+    const ref = await this.command(tx, binding, data.commandId, "RESTART");
+    tx.update(ref, { status: "DONE", finishedAt: FieldValue.serverTimestamp(), outcome: "RESTART_ACKNOWLEDGED_SESSION_KEPT" });
+    tx.set(this.db.doc(`whatsappQrConnectors/${binding.id}`), { lastCommandId: ref.id, lastCommandType: "RESTART", lastCommandStatus: "DONE",
+      lastCommandMessage: "El conector confirmó el reinicio y vuelve en unos segundos; la sesión de WhatsApp se conserva.", lastCommandFinishedAt: FieldValue.serverTimestamp() }, { merge: true });
+    return { restartAcknowledged: true, commandId: ref.id };
   }
   private async sync(tx: any, bindingRef: any, row: any, data: any) {
     if (!data || !["BEGIN", "UPSERT", "FINISH"].includes(data.phase)) fail("invalid-argument");

@@ -10,11 +10,13 @@ const MAX_DOCUMENT_BYTES = 16 * 1024 * 1024;
 const NOT_READY_LIMIT_MS = 5 * 60 * 1000, DESTROY_TIMEOUT_MS = 15000;
 // WhatsApp stops rotating an unscanned QR after a few minutes and goes idle: restart for a fresh one.
 const QR_IDLE_LIMIT_MS = 4 * 60 * 1000;
+// Auto-update: how often the connector compares its own code on disk with the code it started with.
+const CODE_CHECK_MS = 3 * 60 * 1000;
 // Since 2026-11 WhatsApp Web shows its QR as a link; phones no longer accept the bare payload whatsapp-web.js 1.34.8 emits.
 const LINKED_DEVICES_QR_PREFIX = "https://wa.me/settings/linked_devices#";
 const linkedDevicesQr = qr => /^https?:\/\//i.test(String(qr)) ? String(qr) : LINKED_DEVICES_QR_PREFIX + String(qr);
 async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSession, setTimer = setInterval, clearTimer = clearInterval, captureGroups = false,
-  sendDocuments = false, fetchFile, createMedia, onStopped, now = Date.now, notReadyLimitMs = NOT_READY_LIMIT_MS, destroyTimeoutMs = DESTROY_TIMEOUT_MS, qrIdleLimitMs = QR_IDLE_LIMIT_MS }) {
+  sendDocuments = false, fetchFile, createMedia, onStopped, now = Date.now, notReadyLimitMs = NOT_READY_LIMIT_MS, destroyTimeoutMs = DESTROY_TIMEOUT_MS, qrIdleLimitMs = QR_IDLE_LIMIT_MS, codeFingerprint, codeCheckMs = CODE_CHECK_MS }) {
   if (!transport?.getBinding() || !client || typeof resetLocalSession !== "function") throw Error("ENROLLED_DEPENDENCIES_REQUIRED");
   if (sendDocuments && (typeof fetchFile !== "function" || typeof createMedia !== "function")) throw Error("SEND_DEPENDENCIES_REQUIRED");
   let ready = false, busy = false, stopped = false, pendingResetId = null, delivering = false;
@@ -66,6 +68,12 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
         await resetLocalSession(transport.getBinding().id);
         pendingResetId = command.id;
         await client.initialize();
+      } else if (command.type === "RESTART") {
+        // A restart asked from the page: confirm it (the server records it once), then close. The launcher exits 75 and the supervisor relaunches
+        // with the code on disk. The WhatsApp session is NOT reset: only the process restarts.
+        const receipt = await transport.operate("RESTART_ACK", { commandId: command.id });
+        if (receipt.restartAcknowledged !== true || receipt.commandId !== command.id) throw Error("RESTART_RECEIPT_REQUIRED");
+        await close("RESTART_REQUESTED");
       } else throw Error("UNKNOWN_SERVER_COMMAND");
     } catch (error) {
       // Any rejected/unknown transport outcome closes local activity. Do not
@@ -73,6 +81,22 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
       await close("HEARTBEAT_FAILED");
       throw error;
     } finally { busy = false; }
+  }
+  // Auto-update: when the connector's own files change on disk it restarts itself, but only when idle (nothing being sent, synced or reset),
+  // only for a change that stays the same on two consecutive checks (a file still being written is not a release), and once per change:
+  // the process that restarts takes the new code as its baseline.
+  const startedCode = typeof codeFingerprint === "function" ? (() => { try { return codeFingerprint() || null; } catch { return null; } })() : null;
+  let changedCode = null, updateHandled = false;
+  async function checkCodeUpdate() {
+    if (startedCode === null || stopped || updateHandled) return "SKIPPED";
+    let current;
+    try { current = codeFingerprint(); } catch { return "UNREADABLE"; }
+    if (!current || current === startedCode) { changedCode = null; return "UNCHANGED"; }
+    if (changedCode !== current) { changedCode = current; return "CHANGE_SEEN"; }
+    if (busy || delivering || pendingResetId !== null) return "BUSY";
+    updateHandled = true;
+    await close("CODE_UPDATED");
+    return "RESTARTING";
   }
   client.on("qr", event(async raw => { const qr = linkedDevicesQr(raw); awaitingQr = true; lastQrAt = now(); pendingQr = { qrText: qr, qrDataUrl: await encodeQr(qr) }; await status({ status: "QR_REQUIRED", ...pendingQr, error: null,
     ...(pendingResetId ? { resetCommandId: pendingResetId } : {}) }); pendingResetId = null; }));
@@ -244,7 +268,8 @@ async function runEnrolledConnector({ transport, client, encodeQr, resetLocalSes
   if (captureGroups) timers.push(setTimer(() => flush().catch(() => undefined), 15000));
   if (sendDocuments) timers.push(setTimer(() => deliver().catch(() => undefined), 10000));
   timers.push(setTimer(() => watchdog().catch(() => undefined), 60000));
-  return { poll, synchronize, flush, deliver, watchdog, stop: async () => { stopped = true; for (const timer of timers) clearTimer(timer); await client.destroy(); } };
+  if (startedCode !== null) timers.push(setTimer(() => checkCodeUpdate().catch(() => undefined), codeCheckMs));
+  return { poll, synchronize, flush, deliver, watchdog, checkCodeUpdate, stop: async () => { stopped = true; for (const timer of timers) clearTimer(timer); await client.destroy(); } };
 }
 
 async function startExplicitly(config) {
@@ -262,6 +287,10 @@ async function startExplicitly(config) {
   // tell Chrome to bypass it before the page opens (the login lives elsewhere in the profile and is kept).
   class PinnedLocalAuth extends LocalAuth { async afterBrowserInitialized() { await super.afterBrowserInitialized(); await this.client.pupPage.setBypassServiceWorker(true); console.log(JSON.stringify({ status: "PINNED_WEB_VERSION", webVersion: pinned.webVersion, serviceWorkerBypassed: true })); } }
   const Auth = pinned.webVersion ? PinnedLocalAuth : LocalAuth;
+  // The files whose change means "new version": the connector itself, its launcher and helpers, and the signing policy it loads.
+  const crypto = require("node:crypto"), fsSync = require("node:fs");
+  const codeFiles = ["enrolledConnector.cjs", "enrolledLauncher.cjs", "connectorAuthority.cjs", "workerEnrollment.cjs", "readChats.cjs"].map(name => path.join(__dirname, name)).concat(config.policyModule ? [path.resolve(config.policyModule)] : []);
+  const codeFingerprint = () => { const hash = crypto.createHash("sha256"); for (const file of codeFiles) hash.update(file).update(fsSync.readFileSync(file)); return hash.digest("hex"); };
   const client = new Client({ authStrategy: new Auth({ clientId: binding.id, dataPath: sessionRoot }), ...pinned,
     puppeteer: { headless: true, ...(config.executablePath ? { executablePath: config.executablePath } : {}) } });
   // Signed Storage URLs only: HTTPS, no redirects, bounded time and size.
@@ -270,7 +299,7 @@ async function startExplicitly(config) {
     if (!response.ok) throw Error("DOCUMENT_DOWNLOAD_FAILED");
     return Buffer.from(await response.arrayBuffer());
   };
-  return runEnrolledConnector({ transport, client, captureGroups: config.captureGroups === true, sendDocuments: config.sendDocuments === true,
+  return runEnrolledConnector({ transport, client, codeFingerprint, captureGroups: config.captureGroups === true, sendDocuments: config.sendDocuments === true,
     onStopped: typeof config.onStopped === "function" ? config.onStopped : undefined,
     fetchFile, createMedia: (mimetype, data, filename) => new MessageMedia(mimetype, data, filename), encodeQr: qr => qrcode.toDataURL(qr, { margin: 1, width: 320 }),
     resetLocalSession: async id => { if (id !== binding.id) throw Error("SESSION_ID_MISMATCH"); await fs.rm(sessionDir, { recursive: true, force: true }); } });

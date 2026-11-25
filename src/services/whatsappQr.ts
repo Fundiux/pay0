@@ -266,6 +266,11 @@ export async function revokeWhatsAppAgentConnector(bindingId: string) {
   return (await httpsCallable<{ bindingId: string }, { ok: boolean }>(functions, "revokeWhatsAppConnectorBinding")({ bindingId })).data;
 }
 
+/** Superadmin only (enforced by the server): restarts the agent's local connector; the WhatsApp session is kept. */
+export async function requestWhatsAppConnectorRestart(agentId: string) {
+  return (await httpsCallable<{ agentId: string }, { ok: boolean; commandId: string; status: string; duplicate?: boolean; message: string }>(functions, "requestWhatsAppConnectorRestart")({ agentId })).data;
+}
+
 export async function getWhatsAppAgentActivity(days = 7) {
   return (await httpsCallable<{ days: number }, { ok: boolean; days: number; truncated: boolean; totalMessages: number; rows: WhatsAppAgentActivityRow[] }>(functions, "getWhatsAppAgentActivity", { timeout: 120000 })({ days })).data;
 }

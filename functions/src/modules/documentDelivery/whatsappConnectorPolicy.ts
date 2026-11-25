@@ -1,6 +1,6 @@
 import { createHash, createPublicKey, verify } from "node:crypto";
 
-export type WorkerAction = "SYNC_CHATS" | "NEW_QR" | "HEARTBEAT" | "INBOUND_GROUP" | "CLAIM_DELIVERY" | "REPORT_DELIVERY";
+export type WorkerAction = "SYNC_CHATS" | "NEW_QR" | "RESTART_ACK" | "HEARTBEAT" | "INBOUND_GROUP" | "CLAIM_DELIVERY" | "REPORT_DELIVERY";
 
 /** Actions that send to clients; the authority allows them only for the document sender agent. */
 export const SENDING_WORKER_ACTIONS: readonly WorkerAction[] = ["CLAIM_DELIVERY", "REPORT_DELIVERY"];
@@ -296,6 +296,7 @@ function assertAction(value: unknown, code: string): asserts value is WorkerActi
   if (
     value !== "SYNC_CHATS" &&
     value !== "NEW_QR" &&
+    value !== "RESTART_ACK" &&
     value !== "HEARTBEAT" &&
     value !== "INBOUND_GROUP" &&
     value !== "CLAIM_DELIVERY" &&

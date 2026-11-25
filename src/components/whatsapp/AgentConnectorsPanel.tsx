@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, ShieldOff } from "lucide-react";
+import { Loader2, RotateCw, ShieldOff } from "lucide-react";
 import {
   createWhatsAppAgentEnrollment,
   getWhatsAppAgentActivity,
@@ -11,6 +11,7 @@ import {
   saveWhatsAppAgentObservers,
   listWhatsAppAgentChats,
   listWhatsAppAgentConnectors,
+  requestWhatsAppConnectorRestart,
   revokeWhatsAppAgentConnector,
   type WhatsAppAgentActivityRow,
   type WhatsAppAgentChats,
@@ -613,6 +614,15 @@ export function AgentConnectorsPanel() {
     finally { setBusy(""); }
   }
 
+  async function restart(agentId: string, agentLabel: string, bindingId: string) {
+    if (!window.confirm(`¿Reiniciar el conector de ${agentLabel}? Se desconecta unos segundos y vuelve solo; la sesión de WhatsApp se conserva.`)) return;
+    setBusy(`restart-${bindingId}`);
+    setMessage("");
+    try { setMessage((await requestWhatsAppConnectorRestart(agentId)).message); await load(); }
+    catch (e: any) { setMessage(`No se pudo solicitar el reinicio: ${e?.message || e}`); }
+    finally { setBusy(""); }
+  }
+
   async function loadActivity() {
     setBusy("activity");
     try { setActivity((await getWhatsAppAgentActivity(7)).rows); }
@@ -659,6 +669,9 @@ export function AgentConnectorsPanel() {
                         {" · "}
                         <button type="button" onClick={() => document.getElementById(`grupos-${agent.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" })} className="text-sky-300 underline-offset-2 hover:underline">ver</button>
                       </p>
+                      <button type="button" disabled={busy === `restart-${connector.bindingId}`} onClick={() => void restart(agent.id, agent.name, connector.bindingId)} className="inline-flex items-center gap-2 rounded-lg border border-sky-500/40 px-2.5 py-1 text-xs text-sky-200 disabled:opacity-40">
+                        <RotateCw size={13} /> Reiniciar {agent.name}
+                      </button>
                       <button type="button" disabled={busy === connector.bindingId} onClick={() => void revoke(connector.bindingId)} className="inline-flex items-center gap-2 rounded-lg border border-rose-500/40 px-2.5 py-1 text-xs text-rose-200 disabled:opacity-40">
                         <ShieldOff size={13} /> Revocar conexión
                       </button>
