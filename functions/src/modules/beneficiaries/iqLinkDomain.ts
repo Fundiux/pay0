@@ -12,12 +12,14 @@ export type ClientCatalogProfile = { catalog: string; profileId: string; profile
 export function catalogsForClient(client: Record<string, unknown> | null | undefined): ClientCatalogProfile[] {
   const byCatalog = new Map<string, ClientCatalogProfile>();
   const links = asRecord(asRecord(client).iqLinksByProfile);
+  // Older links keep the associate only in client.iqLink; it is used when the profile link lacks the id and names the same associate.
+  const legacy = asRecord(asRecord(client).iqLink);
   for (const profileId of Object.keys(links).sort()) {
     const link = asRecord(links[profileId]);
     const catalog = iqCatalogForAlias(link.profileAlias);
     const clientIqId = clean(link.clientId);
     if (!catalog || !clientIqId || link.active === false || clean(link.status).toUpperCase() !== "LINKED" || byCatalog.has(catalog)) continue;
-    byCatalog.set(catalog, { catalog, profileId: clean(link.profileId) || profileId, profileAlias: clean(link.profileAlias), partnerName: clean(link.partnerName), partnerId: clean(link.partnerId), clientIqId });
+    byCatalog.set(catalog, { catalog, profileId: clean(link.profileId) || profileId, profileAlias: clean(link.profileAlias), partnerName: clean(link.partnerName), partnerId: clean(link.partnerId) || (clean(legacy.partnerId) && clean(legacy.partnerName).toUpperCase() === clean(link.partnerName).toUpperCase() ? clean(legacy.partnerId) : ""), clientIqId });
   }
   return [...byCatalog.values()];
 }
@@ -31,8 +33,9 @@ export const linkActivityId = (methodId: string, catalog: string, accountKey: st
 
 export const mexicoDay = (nowMs: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(nowMs));
 
-// Owner-approved 2026-11-22. Creation itself stays off until enabled and contractVerified are set.
-export const DEFAULT_DAILY_CREATE_LIMIT = 100;
+// Owner decision 2026-11-24: no daily cap unless dailyLimit is set explicitly, like dispersions, solicitudes and pagos.
+// Creation itself stays off until enabled and contractVerified are set.
+export const DEFAULT_DAILY_CREATE_LIMIT = Number.POSITIVE_INFINITY;
 export const MAX_DAILY_CREATE_LIMIT = 200;
 
 export type CreateConfig = { enabled?: unknown; contractVerified?: unknown; dailyLimit?: unknown; catalogMaxAgeHours?: unknown };
@@ -94,6 +97,14 @@ export function storedIqLink(method: Record<string, unknown>, profileAlias: unkn
   if (!link || link.nameDiffers === true || !iqLinkMatchesMethod(link, method) || !/^\d+$/.test(beneficiaryId) || !/^\d+$/.test(accountId)) return {};
   if (destination && iqAccountKey(destination) !== link.key) return {};
   return { storedLink: { beneficiaryId, accountId } };
+}
+
+// "READY" (white) only when IQ has the account reconciled: a stored link for this profile's catalog that still
+// matches the account, or the older VERIFIED link. Anything else is pending (orange) and is not dispersed.
+export function iqLinkReadiness(method: Record<string, unknown>, profileAlias: unknown, destinationDigits?: unknown): "READY" | "PENDING" {
+  if (storedIqLink(method, profileAlias, destinationDigits).storedLink) return "READY";
+  const legacyVerified = clean(method.iqLinkStatus).toUpperCase() === "VERIFIED" && /^d+$/.test(clean(method.iqBeneficiaryId)) && /^d+$/.test(clean(method.iqAccountId));
+  return legacyVerified ? "READY" : "PENDING";
 }
 
 // Stops that only mean "not yet": they are stored as PENDING_RETRY and picked up again by the scheduled

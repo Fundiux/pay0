@@ -21,7 +21,7 @@ import { requireClientOperationalAccess } from "../clientDelegations/access";
 import { assertAuthorized } from "../../utils/authGuard";
 import { decideIqDispersionExecutionAccess } from "./dispersionExecutionAccess";
 import { assertIqIdentityInvariant, resolveEffectiveIqIdentity } from "./originIdentity";
-import { storedIqLink } from "../beneficiaries/iqLinkDomain";
+import { iqLinkReadiness, storedIqLink } from "../beneficiaries/iqLinkDomain";
 import { dispersionFailureReason } from "./dispersionFailureReason";
 import { syncDispersionIqIncident } from "./dispersionIqIncident";
 // H4_D85_A10_A50_A6_HTTP_DIRECT_DISPERSION
@@ -1936,6 +1936,16 @@ export async function runCreateClientDispersionIqCore(input: {
       throw error;
     }
   
+    // The beneficiary account must be reconciled in IQ (white) before money is sent to it.
+    if (principal.fundingSource?.holderType !== "USER" && iqLinkReadiness(method, access.profileAlias, clean(
+      destination.kind === "CLABE"
+        ? (method.clabe ?? method.CLABE ?? method.bankClabe)
+        : (method.cardNumber ?? method.numeroTarjeta ?? method.tarjeta),
+    )) !== "READY") {
+      results.push({ legId: legDoc.id, despachoId, status: "SKIPPED", reason: "BENEFICIARIO_PENDIENTE_IQ" });
+      continue;
+    }
+
     eligibleCount += 1;
   
     const amount = money(

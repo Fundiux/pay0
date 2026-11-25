@@ -4,6 +4,7 @@ import { isSystemNote, noteAuthorLabel } from "@/lib/notePresentation";
 import { useDispersionNotes, dispersionNoteDisplayDate } from "@/lib/useDispersionNotes";
 
 import { formatDateTime24 } from "@/lib/dateTime";
+import { IQ_PENDING_LABEL, isIqReconciled } from "@/lib/iqMethodReadiness";
 import { parsePay0MassiveLayoutRows, toPay0MassiveDispersionItem, type Pay0MassiveMethodTipo } from "@/lib/pay0MassiveLayout";
 import { readPay0MassiveRowsFromFile } from "@/lib/readPay0MassiveExcel";
 
@@ -129,6 +130,10 @@ interface MethodRow {
   cardNumber?: string | null;
   numeroTarjeta?: string | null;
   tarjeta?: string | null;
+  iqLinkStatus?: string | null;
+  iqBeneficiaryId?: string | null;
+  iqAccountId?: string | null;
+  iqLinksByCatalog?: Record<string, unknown> | null;
   active?: boolean;
   replaced?: boolean;
   replacementStatus?: string | null;
@@ -2400,10 +2405,15 @@ export default function WalletDispersionesPage({ matCreateOnly = false, matClien
               setError("");
             }}
             disabled={!beneficiaryId}
-            options={filteredMethods.map((item) => ({
-              value: item.id,
-              label: `${item.tipo || "-"} | ${item.bankName || "-"} | ${item.clabe || item.cardNumber || item.destinationKind || "-"}`,
-            }))}
+            options={filteredMethods.map((item) => {
+              const isCash = /EFECTIVO/i.test(`${item.destinationKind || ""} ${item.tipo || ""}`);
+              const pending = !isCash && !isIqReconciled(item);
+              return {
+                value: item.id,
+                label: `${pending ? "🟠 " : ""}${item.tipo || "-"} | ${item.bankName || "-"} | ${item.clabe || item.cardNumber || item.destinationKind || "-"}${pending ? ` — ${IQ_PENDING_LABEL}` : ""}`,
+                disabled: pending,
+              };
+            })}
             placeholder={beneficiaryId && filteredMethods.length === 0 ? "Sin metodos activos" : "Metodo"}
           />
 
