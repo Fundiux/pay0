@@ -105,7 +105,7 @@ export function storedIqLink(method: Record<string, unknown>, profileAlias: unkn
 // matches the account, or the older VERIFIED link. Anything else is pending (orange) and is not dispersed.
 export function iqLinkReadiness(method: Record<string, unknown>, profileAlias: unknown, destinationDigits?: unknown): "READY" | "PENDING" {
   if (storedIqLink(method, profileAlias, destinationDigits).storedLink) return "READY";
-  const legacyVerified = clean(method.iqLinkStatus).toUpperCase() === "VERIFIED" && /^d+$/.test(clean(method.iqBeneficiaryId)) && /^d+$/.test(clean(method.iqAccountId));
+  const legacyVerified = clean(method.iqLinkStatus).toUpperCase() === "VERIFIED" && /^\d+$/.test(clean(method.iqBeneficiaryId)) && /^\d+$/.test(clean(method.iqAccountId));
   return legacyVerified ? "READY" : "PENDING";
 }
 
