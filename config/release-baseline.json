@@ -792,6 +792,14 @@
     {
       "commit": "33973aaf",
       "capability": "Hugo publica el QR como enlace de dispositivos vinculados de WhatsApp y se reinicia si el QR queda inactivo"
+    },
+    {
+      "commit": "9d214b28",
+      "capability": "Boton Reiniciar Hugo (comando RESTART con RESTART_ACK de un solo uso, sesion conservada) y autoactualizacion del conector"
+    },
+    {
+      "commit": "dbd86184",
+      "capability": "Facturas y comprobantes recuperados de IQ se descargan fuera de horario con cuota propia; lo propio de PAY0 sigue con ventana"
     }
   ],
   "requiredText": [
