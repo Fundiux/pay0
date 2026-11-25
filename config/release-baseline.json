@@ -856,6 +856,10 @@
     {
       "commit": "6fe5c09b",
       "capability": "Beneficiario nuevo no espera el catalogo: se consulta IQ al momento y se vincula o crea; renglon pendiente con texto naranja y etiqueta PENDIENTE"
+    },
+    {
+      "commit": "02268356",
+      "capability": "Alta de beneficiario espera el espaciado de seguridad entre la consulta y el alta en IQ en vez de diferir"
     }
   ],
   "requiredText": [
