@@ -1103,9 +1103,33 @@ export async function probeIqDispersionModule(): Promise<{
 export type IqBeneficiaryCreateConfig = {
   enabled: boolean;
   contractVerified: boolean;
-  dailyLimit: number;
+  /** null = no daily cap. */
+  dailyLimit: number | null;
   catalogMaxAgeHours: number;
 };
+
+export type IqBeneficiaryPendingRow = {
+  methodId: string; catalog: string; status: string; reason: string; attempts: number;
+  beneficiaryName: string; clientName: string; bankName: string; last4: string;
+  retryAfterMs: number | null; retriable: boolean;
+};
+
+export type IqBeneficiaryCreateState = IqBeneficiaryCreateConfig & {
+  masterEnabled: boolean;
+  createdToday: number;
+  catalogs: { catalog: string; partnerSyncedAtMs: number | null; completedAtMs: number | null }[];
+  pending: IqBeneficiaryPendingRow[];
+};
+
+/** Super Admin only: create switches, today's count and every account not yet reconciled in IQ. */
+export async function getIqBeneficiaryCreateState(): Promise<IqBeneficiaryCreateState> {
+  return callIq<Record<string, never>, IqBeneficiaryCreateState>("getIqBeneficiaryCreateState", {}, 60_000);
+}
+
+/** Super Admin only: tries linking or creating again for one account or the pending ones. */
+export async function retryIqBeneficiaryLinks(input: { methodId?: string }): Promise<{ retried: number; results: { methodId: string; status: string }[] }> {
+  return callIq<{ methodId?: string }, { retried: number; results: { methodId: string; status: string }[] }>("retryIqBeneficiaryLinks", input, 300_000);
+}
 
 /** Super Admin only: automatic beneficiary creation in IQ for the caller's root. Only the fields sent change. */
 export async function setIqBeneficiaryCreateConfig(

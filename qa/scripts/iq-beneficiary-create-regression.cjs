@@ -128,6 +128,8 @@ const resetIq = () => { iq.requests.length = 0; iq.logins.length = 0; iq.account
     { linked: 2, created: 1, awaitingConciliation: 1, pending: 2, stuck: 1, review: 1, notFound: 0 }, "resumen diario por estado");
   eq(parseCreateConfigPatch({ enabled: true, dailyLimit: 100 }), { enabled: true, dailyLimit: 100 }, "configuración válida");
   assert.throws(() => parseCreateConfigPatch({ dailyLimit: 500 }), /dailyLimit/); checks++;
+  eq(parseCreateConfigPatch({ dailyLimit: null }), { dailyLimit: null }, "vaciar el límite diario lo quita");
+  eq(parseCreateConfigPatch({ dailyLimit: "" }), { dailyLimit: null }, "límite vacío = sin límite");
   assert.throws(() => parseCreateConfigPatch({ enabled: "si" }), /enabled/); checks++;
   assert.throws(() => parseCreateConfigPatch({}), /Sin cambios/); checks++;
 

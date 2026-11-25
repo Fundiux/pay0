@@ -10,14 +10,16 @@ const text = (value: unknown) => String(value ?? "").trim();
 const asRecord = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
 // Validates the change; only the fields sent are touched. Exported for tests.
-export function parseCreateConfigPatch(data: unknown): Record<string, boolean | number> {
-  const input = asRecord(data), patch: Record<string, boolean | number> = {};
+// dailyLimit null or empty removes the cap (no daily limit).
+export function parseCreateConfigPatch(data: unknown): Record<string, boolean | number | null> {
+  const input = asRecord(data), patch: Record<string, boolean | number | null> = {};
   for (const field of ["enabled", "contractVerified"]) {
     if (input[field] === undefined) continue;
     if (typeof input[field] !== "boolean") throw new HttpsError("invalid-argument", `${field} debe ser verdadero o falso.`);
     patch[field] = input[field] as boolean;
   }
-  if (input.dailyLimit !== undefined) {
+  if (input.dailyLimit === null || input.dailyLimit === "") patch.dailyLimit = null;
+  else if (input.dailyLimit !== undefined) {
     const limit = Number(input.dailyLimit);
     if (!Number.isInteger(limit) || limit < 0 || limit > MAX_DAILY_CREATE_LIMIT) throw new HttpsError("invalid-argument", `dailyLimit debe ser un entero entre 0 y ${MAX_DAILY_CREATE_LIMIT}.`);
     patch.dailyLimit = limit;
@@ -41,8 +43,9 @@ export const setIqBeneficiaryCreateConfig = onCall({ cors: true, invoker: "publi
   const patch = parseCreateConfigPatch(request.data);
   const ref = db.doc(`iqBeneficiaryCreateConfig/${rootId}`);
   const before = (await ref.get()).data() || {};
-  await ref.set({ ...patch, rootId, updatedBy: uid, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-  const after = { ...before, ...patch };
+  const stored = Object.fromEntries(Object.entries(patch).map(([key, value]) => [key, value === null ? FieldValue.delete() : value]));
+  await ref.set({ ...stored, rootId, updatedBy: uid, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  const after: Record<string, unknown> = { ...before, ...patch };
   await logActivity({ event: "IQ_BENEFICIARIO_ALTA_CONFIGURADA", rootId, actorUid: uid, actorRole: "superadmin", referenceType: "iqBeneficiaryCreateConfig",
     description: `Alta automática de beneficiarios en IQ: ${after.enabled === true ? "encendida" : "apagada"}, contrato ${after.contractVerified === true ? "verificado" : "sin verificar"}, ${Number.isFinite(Number(after.dailyLimit)) ? `límite diario ${Number(after.dailyLimit)}` : "sin límite diario"}.`,
     extra: { changed: Object.keys(patch) } }).catch(() => undefined);
