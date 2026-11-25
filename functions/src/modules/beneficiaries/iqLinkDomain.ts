@@ -33,8 +33,9 @@ export const linkActivityId = (methodId: string, catalog: string, accountKey: st
 
 export const mexicoDay = (nowMs: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(nowMs));
 
-// Owner-approved 2026-11-22. Creation itself stays off until enabled and contractVerified are set.
-export const DEFAULT_DAILY_CREATE_LIMIT = 100;
+// Owner decision 2026-11-24: no daily cap unless dailyLimit is set explicitly, like dispersions, solicitudes and pagos.
+// Creation itself stays off until enabled and contractVerified are set.
+export const DEFAULT_DAILY_CREATE_LIMIT = Number.POSITIVE_INFINITY;
 export const MAX_DAILY_CREATE_LIMIT = 200;
 
 export type CreateConfig = { enabled?: unknown; contractVerified?: unknown; dailyLimit?: unknown; catalogMaxAgeHours?: unknown };

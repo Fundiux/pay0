@@ -4,7 +4,7 @@ import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { logActivity } from "../../utils/logActivity";
 import { assertIqAuthorized } from "../iq/authorization";
 import { db } from "../sharedCallables/helpers";
-import { DEFAULT_CATALOG_MAX_AGE_HOURS, DEFAULT_DAILY_CREATE_LIMIT, MAX_DAILY_CREATE_LIMIT } from "./iqLinkDomain";
+import { DEFAULT_CATALOG_MAX_AGE_HOURS, MAX_DAILY_CREATE_LIMIT } from "./iqLinkDomain";
 
 const text = (value: unknown) => String(value ?? "").trim();
 const asRecord = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -44,11 +44,12 @@ export const setIqBeneficiaryCreateConfig = onCall({ cors: true, invoker: "publi
   await ref.set({ ...patch, rootId, updatedBy: uid, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
   const after = { ...before, ...patch };
   await logActivity({ event: "IQ_BENEFICIARIO_ALTA_CONFIGURADA", rootId, actorUid: uid, actorRole: "superadmin", referenceType: "iqBeneficiaryCreateConfig",
-    description: `Alta automática de beneficiarios en IQ: ${after.enabled === true ? "encendida" : "apagada"}, contrato ${after.contractVerified === true ? "verificado" : "sin verificar"}, límite diario ${Number(after.dailyLimit ?? DEFAULT_DAILY_CREATE_LIMIT)}.`,
+    description: `Alta automática de beneficiarios en IQ: ${after.enabled === true ? "encendida" : "apagada"}, contrato ${after.contractVerified === true ? "verificado" : "sin verificar"}, ${Number.isFinite(Number(after.dailyLimit)) ? `límite diario ${Number(after.dailyLimit)}` : "sin límite diario"}.`,
     extra: { changed: Object.keys(patch) } }).catch(() => undefined);
   return {
     enabled: after.enabled === true, contractVerified: after.contractVerified === true,
-    dailyLimit: Number.isFinite(Number(after.dailyLimit)) ? Number(after.dailyLimit) : DEFAULT_DAILY_CREATE_LIMIT,
+    // null means no daily cap (Infinity would not survive JSON).
+    dailyLimit: Number.isFinite(Number(after.dailyLimit)) ? Number(after.dailyLimit) : null,
     catalogMaxAgeHours: Number.isFinite(Number(after.catalogMaxAgeHours)) ? Number(after.catalogMaxAgeHours) : DEFAULT_CATALOG_MAX_AGE_HOURS,
   };
 });
