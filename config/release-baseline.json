@@ -860,6 +860,10 @@
     {
       "commit": "02268356",
       "capability": "Alta de beneficiario espera el espaciado de seguridad entre la consulta y el alta en IQ en vez de diferir"
+    },
+    {
+      "commit": "5bd8cc46",
+      "capability": "Revision cada 5 minutos de cuentas de beneficiario NOT_CONCILIATED en IQ; sin pendientes no consulta IQ"
     }
   ],
   "requiredText": [
