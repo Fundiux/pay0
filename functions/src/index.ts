@@ -224,6 +224,7 @@ export { sendNewDispersionToIq } from "./modules/iq/dispersionCreateTrigger";
 export { getClientWhatsAppGroups, assignWhatsAppGroupToClients, setWhatsAppInternalGroup } from "./modules/documentDelivery/clientWhatsappGroups";
 export { alertClientGroupOnSolicitud } from "./modules/documentDelivery/clientGroupAlerts";
 export { redriveIqBeneficiaryLinks } from "./modules/beneficiaries/iqLinkRedrive";
+export { watchIqBeneficiaryConciliation } from "./modules/beneficiaries/iqConciliationWatch";
 export { setIqBeneficiaryCreateConfig } from "./modules/beneficiaries/iqCreateConfigCallables";
 export { getIqBeneficiaryCreateState, retryIqBeneficiaryLinks } from "./modules/beneficiaries/iqCreateControlCallables";
 export {

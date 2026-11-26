@@ -315,3 +315,27 @@ export async function linkOrCreateMethod(input: { methodId: string; ports: IqLin
   }
   return outcomes;
 }
+
+// A created account waits for IQ's conciliation. This reads IQ again, only for that associate and account, and links it once IQ shows it
+// conciliated. Not found, still pending or ambiguous leave the entry as it is (a person already sees it as pending).
+export async function recheckConciliation(input: { methodId: string; catalog: string; ports: IqLinkPorts; nowMs?: number; safety?: SafetyRuntime }): Promise<LinkOutcome | null> {
+  const nowMs = input.nowMs ?? Date.now(), safety = input.safety ?? new SafetyRuntime(db);
+  const methodSnap = await db.doc(`clientBeneficiaryMethods/${input.methodId}`).get();
+  const method = methodSnap.data() || {};
+  const account = methodAccountRef(method), rootId = text(method.rootId);
+  const existing = method.iqLinksByCatalog?.[input.catalog];
+  if (!account || !rootId || method.active === false || method.isDeleted === true || existing?.status !== "NOT_CONCILIATED" || existing.key !== account.key) return null;
+  const clientId = text(method.clientId || method.clienteId);
+  const [client, beneficiary] = await Promise.all([db.doc(`clients/${clientId}`).get(), db.doc(`clientBeneficiaries/${text(method.beneficiaryId || method.beneficiarioId)}`).get()]);
+  if (!client.exists || client.get("rootId") !== rootId || !beneficiary.exists || beneficiary.get("rootId") !== rootId) return null;
+  const profile = catalogsForClient(client.data()).find(item => item.catalog === input.catalog);
+  if (!profile || !(Number(profile.partnerId) > 0)) return null;
+  const ctx: IqLinkContext = { rootId, methodId: input.methodId, catalog: input.catalog, profile, beneficiaryName: text(beneficiary.get("nombre") ?? beneficiary.get("name")), method, account };
+  const slot = Math.floor(nowMs / 300_000);
+  const read = await admitted(() => safety.run({ rootId, process: "IQ_BENEFICIARY_LINK", partition: input.catalog, operationType: "IQ_BENEFICIARY_LOOKUP", operationId: `conciliation:${input.methodId}:${slot}`,
+    idempotencyKey: `conciliation:${input.methodId}:${slot}`, origin: "AUTOMATIC", technicalOrigin: "SCHEDULER", externalTarget: "IQ", policy: readPolicy }, () => input.ports.findExisting(ctx)));
+  const found = (read as { value?: FindResult }).value;
+  if (!read.admitted || !found || found.found !== true || found.conciliated !== true) return { methodId: input.methodId, catalog: input.catalog, status: "NOT_CONCILIATED", skipped: "STILL_PENDING" };
+  await reservationRefOf(createReservationId(rootId, input.catalog, account.key)).set({ conciliated: true, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  return settle(ctx, linked(found), existing.source === "LIVE_LOOKUP" ? "LIVE_LOOKUP" : "CREATED_IN_IQ");
+}

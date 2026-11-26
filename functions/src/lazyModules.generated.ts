@@ -455,4 +455,5 @@ export const LAZY_MODULES: Record<string, { module: string; export: string }> = 
   updateUserModules: { module: "./modules/users/modules", export: "updateUserModules" },
   upsertUser: { module: "./modules/legacyCore/callables", export: "upsertUser" },
   verifyTelegramMiniAppSession: { module: "./modules/telegramMiniApp/callables", export: "verifyTelegramMiniAppSession" },
+  watchIqBeneficiaryConciliation: { module: "./modules/beneficiaries/iqConciliationWatch", export: "watchIqBeneficiaryConciliation" },
 };

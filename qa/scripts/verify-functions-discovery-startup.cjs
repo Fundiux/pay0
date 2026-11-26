@@ -38,6 +38,7 @@ const requiredEndpoints = [
   "listDuplicateClientGroupsCallable",
   "linkBeneficiaryMethodToIq",
   "redriveIqBeneficiaryLinks",
+  "watchIqBeneficiaryConciliation",
   "parseClientCsfCallable",
   "parsePagoReceiptPdf",
   "getAuthorizedDocumentDownloadUrl",

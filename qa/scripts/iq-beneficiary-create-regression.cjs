@@ -12,6 +12,7 @@ const { Timestamp, FieldValue } = admin.firestore;
 const lib = "../../functions/lib/modules/beneficiaries";
 const { productionIqLinkPorts } = require(`${lib}/iqLinkPorts.js`);
 const { linkOrCreateMethod } = require(`${lib}/iqLinkService.js`);
+const { watchConciliation } = require(`${lib}/iqConciliationWatch.js`);
 const { createReservationId, catalogAbsenceProof, summarizeEntries, mexicoDay } = require(`${lib}/iqLinkDomain.js`);
 const { iqAccountKey, iqCreateAliasForCatalog } = require(`${lib}/iqCatalogDomain.js`);
 const { isAlreadyExists, resolveIqBankId } = require(`${lib}/iqBeneficiaryCreateHttp.js`);
@@ -331,6 +332,24 @@ const resetIq = () => { iq.requests.length = 0; iq.logins.length = 0; iq.account
   const realSafety = new SafetyRuntime(db);
   const outM = (await linkOrCreateMethod({ methodId: mReal.methodId, ports, safety: realSafety }))[0];
   eq([outM.status, accountPosts(), beneficiaryPosts()], ["NOT_CONCILIATED", 1, 1], "con reloj real: espera el espaciado y crea una sola vez");
+
+  // N. conciliation watch: nothing waiting touches no IQ; a waiting account stays pending until IQ conciliates it, then it is linked
+  await resetSafety(); resetIq(); await setFresh(1);
+  for (const doc of (await db.collection("clientBeneficiaryMethods").where(new admin.firestore.FieldPath("iqLinksByCatalog", "iq-group-rr", "status"), "==", "NOT_CONCILIATED").get()).docs) await doc.ref.update(new admin.firestore.FieldPath("iqLinksByCatalog", "iq-group-rr", "status"), "LINKED");
+  for (const doc of (await db.collection("clientBeneficiaryMethods").where(new admin.firestore.FieldPath("iqLinksByCatalog", "iq-group-pay0", "status"), "==", "NOT_CONCILIATED").get()).docs) await doc.ref.update(new admin.firestore.FieldPath("iqLinksByCatalog", "iq-group-pay0", "status"), "LINKED");
+  const idle = await watchConciliation({ ports, safety, spacingMs: 0 });
+  eq([idle.waiting, iq.requests.length], [0, 0], "sin cuentas por conciliar no se consulta IQ");
+  const n = await setup("nwatch");
+  eq((await link(n.methodId)).status, "NOT_CONCILIATED", "la cuenta nueva queda por conciliar");
+  iq.requests.length = 0;
+  const still = await watchConciliation({ ports, safety, spacingMs: 0 });
+  eq([still.waiting, still.linked, accountPosts(), beneficiaryPosts()], [1, 0, 0, 0], "IQ aún no concilia: sigue pendiente y no se crea nada");
+  eq((await entry(n.methodId)).status, "NOT_CONCILIATED", "sigue NOT_CONCILIATED");
+  for (const b of iq.beneficiaries) for (const acc of b.accounts) if (acc.clabe === n.clabe) acc.conciliation_status = "Conciliado";
+  clock += 600_000;
+  const done = await watchConciliation({ ports, safety, spacingMs: 0, nowMs: Date.now() + 600_000 });
+  eq([done.linked, (await entry(n.methodId)).status], [1, "LINKED"], "IQ ya concilió: se vincula");
+  eq([accountPosts(), beneficiaryPosts()], [0, 0], "vincular no crea nada");
 
   console.log(`PASS alta automática de beneficiarios en IQ: ${checks} verificaciones en emulador (IQ simulado por HTTP).`);
   process.exit(0);
