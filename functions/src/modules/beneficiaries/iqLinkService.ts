@@ -163,7 +163,7 @@ async function admitted<R extends { admitted: boolean; reason?: unknown }>(attem
   for (let retry = 0; retry < SPACING_RETRIES && !result.admitted && String(result.reason) === "CAPACITY"; retry += 1) { await sleep(SPACING_WAIT_MS); result = await attempt(); }
   return result;
 }
-const bucketOf = (nowMs: number) => Math.floor(nowMs / 600_000);
+const bucketOf = (nowMs: number) => Math.floor(nowMs / 300_000);
 
 // After "ya existe" or a lost answer the create is never sent again: IQ is read at account level and the
 // result linked; what cannot be settled by reading goes to a person.
@@ -182,7 +182,7 @@ async function reconcile(run: Run, reservationId: string, cause: "OUTCOME_UNKNOW
   // Not found yet (IQ may still be writing it) or the read was refused: read again later, a bounded number of times.
   if (run.attempts < MAX_UNKNOWN_OUTCOME_READS) {
     await writeEntry(ctx, { status: "PENDING_RETRY", reason: UNKNOWN_OUTCOME_REASON, attempts: run.attempts, key: ctx.account.key, last4: ctx.account.last4, source: "CREATED_IN_IQ", createState: "OUTCOME_UNKNOWN",
-      retryAfter: Timestamp.fromMillis(run.nowMs + (retryDelayMs(UNKNOWN_OUTCOME_REASON) ?? 21_600_000)), pendingSince: run.pendingSince instanceof Timestamp ? run.pendingSince : Timestamp.fromMillis(run.nowMs), checkedAt: FieldValue.serverTimestamp() },
+      retryAfter: Timestamp.fromMillis(run.nowMs + (retryDelayMs(UNKNOWN_OUTCOME_REASON) ?? 300_000)), pendingSince: run.pendingSince instanceof Timestamp ? run.pendingSince : Timestamp.fromMillis(run.nowMs), checkedAt: FieldValue.serverTimestamp() },
       { event: AUDIT_EVENT.OUTCOME_UNKNOWN, status: "PENDING_RETRY", source: "CREATED_IN_IQ", outcomeKey: "PENDING_RETRY:CREATED_IN_IQ:OUTCOME_UNKNOWN",
         description: `No se sabe si IQ creó la cuenta ****${ctx.account.last4}; PAY0 solo la vuelve a buscar, no la envía otra vez.` });
     return { methodId: ctx.methodId, catalog: ctx.catalog, status: "PENDING_RETRY", createState: UNKNOWN_OUTCOME_REASON };

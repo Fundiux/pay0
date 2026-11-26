@@ -227,7 +227,7 @@ const resetIq = () => { iq.requests.length = 0; iq.logins.length = 0; iq.account
   const outE = await link(e.methodId);
   eq([outE.status, outE.createState, accountPosts()], ["PENDING_RETRY", "CREATE_OUTCOME_UNKNOWN", 1], "resultado incierto: pendiente de releer");
   let last;
-  for (let i = 1; i <= 3; i++) { await resetSafety(); last = await link(e.methodId, Date.now() + i * 7 * 3_600_000); }
+  for (let i = 1; i <= 47; i++) { await resetSafety(); last = await link(e.methodId, Date.now() + i * 600_000); }
   eq([last.status, last.createState, accountPosts()], ["REVIEW_REQUIRED", "OUTCOME_UNKNOWN", 1], "tras releer sin encontrarla va a revisión; un solo POST de cuenta en total");
   eq((await reservation(e.clabe)).status, "OUTCOME_UNKNOWN", "la reserva incierta nunca se vuelve a tomar");
 

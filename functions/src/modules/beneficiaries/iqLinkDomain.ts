@@ -116,13 +116,15 @@ const HOUR = 3_600_000;
 export const GATE_REASONS = new Set(["IQ_MASTER_OFF", "CREATE_DISABLED", "CREATE_CONTRACT_UNVERIFIED", "DAILY_LIMIT_REACHED", "ABSENCE_NOT_PROVEN"]);
 // Waiting for the nightly catalog to read the associate again is not a failure either: it never spends attempts.
 export const WAITING_REASONS = new Set([...GATE_REASONS, "CATALOG_STALE"]);
-// A create whose answer was lost is only re-read, never re-sent: a few reads over a day, then a person.
+// A create whose answer was lost (or "ya existe" before IQ lists it) is only re-read, never re-sent: every 5 minutes for 4 hours, then a person.
 export const UNKNOWN_OUTCOME_REASON = "CREATE_OUTCOME_UNKNOWN";
-export const MAX_UNKNOWN_OUTCOME_READS = 4;
+export const MAX_UNKNOWN_OUTCOME_READS = 48;
+export const UNKNOWN_OUTCOME_RETRY_MS = 5 * 60_000;
 
 export function retryDelayMs(reason: string): number | null {
   if (reason === "IQ_MASTER_OFF") return HOUR;
-  if (reason === "DAILY_LIMIT_REACHED" || reason === "CREATE_DISABLED" || reason === "CREATE_CONTRACT_UNVERIFIED" || reason === "ABSENCE_NOT_PROVEN" || reason === "CATALOG_STALE" || reason === UNKNOWN_OUTCOME_REASON) return 6 * HOUR;
+  if (reason === "DAILY_LIMIT_REACHED" || reason === "CREATE_DISABLED" || reason === "CREATE_CONTRACT_UNVERIFIED" || reason === "ABSENCE_NOT_PROVEN" || reason === "CATALOG_STALE") return 6 * HOUR;
+  if (reason === UNKNOWN_OUTCOME_REASON) return UNKNOWN_OUTCOME_RETRY_MS;
   if (reason === "LOOKUP_FAILED" || reason === "CREATE_NOT_SENT" || reason.startsWith("SAFETY_")) return HOUR / 2;
   return null;
 }
