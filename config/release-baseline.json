@@ -864,6 +864,10 @@
     {
       "commit": "5bd8cc46",
       "capability": "Revision cada 5 minutos de cuentas de beneficiario NOT_CONCILIATED en IQ; sin pendientes no consulta IQ"
+    },
+    {
+      "commit": "90a9ab7c",
+      "capability": "Alta de beneficiario incierta se relee en IQ cada 5 minutos hasta 4 horas, sin reenviar el alta"
     }
   ],
   "requiredText": [
